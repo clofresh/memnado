@@ -15,6 +15,7 @@ class Memnado(object):
         self.stream = IOStream(s)
     
     def set(self, key, value, callback, expiry=0):
+        key = b64encode(key)
         value = b64encode(value)
         content_length = len(value)
         self.stream.write("set %s 1 %s %s\r\n%s\r\n" % (key, expiry, 
@@ -22,6 +23,8 @@ class Memnado(object):
         self.stream.read_until("\r\n", callback)
     
     def get(self, key, callback):
+        key = b64encode(key)
+        
         def process_get(stream, cb, data):
             if data[0:3] == 'END': # key is empty
                 cb(None)
