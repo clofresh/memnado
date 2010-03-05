@@ -1,5 +1,6 @@
 import functools
 import socket
+from base64 import b64encode, b64decode
 
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
@@ -13,7 +14,8 @@ class Memnado(object):
         s.connect((self.host, self.port))
         self.stream = IOStream(s)
     
-    def set(self, key, value, expiry=0, callback=lambda d: d):
+    def set(self, key, value, callback, expiry=0):
+        value = b64encode(value)
         content_length = len(value)
         self.stream.write("set %s 1 %s %s\r\n%s\r\n" % (key, expiry, 
                         content_length, value))
@@ -21,19 +23,19 @@ class Memnado(object):
     
     def get(self, key, callback):
         def process_get(stream, cb, data):
-            status, k, flags, content_length = data.strip().split(' ')
-            stream.read_bytes(int(content_length), functools.partial(cb, stream))
+            if data[0:3] == 'END': # key is empty
+                cb(None)
+            else:
+                status, k, flags, content_length = data.strip().split(' ')
+                
+                def wrapped_cb(f):
+                    return lambda data: f(b64decode(data))
+                
+                stream.read_bytes(int(content_length), wrapped_cb(cb))
+                stream.read_until("\r\nEND\r\n", lambda d: d)
         
         self.stream.write("get %s\r\n" % key)
         self.stream.read_until("\r\n", functools.partial(process_get, self.stream, callback))
 
 
-if __name__ == '__main__':
-    def do_stuff(stream, data):
-        print "I made it! %s" % data
-
-    m = Memnado("127.0.0.1", 11211)
-    m.get("hey", do_stuff)
-
-    IOLoop.instance().start()
 
